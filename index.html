@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>내 통장 이자 계산기</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff;
+    --border: rgba(0,0,0,0.08); --border-md: rgba(0,0,0,0.14);
+    --text: #1a1a1a; --text-2: #6b6b6b; --text-3: #a8a8a8;
+    --blue: #1a6ef5; --blue-bg: #eef3ff; --blue-text: #1a4fa3;
+    --green: #1a8a5a; --green-bg: #e8f5ee; --green-text: #145c3c;
+    --red: #c93030; --red-bg: #fceaea;
+    --radius: 14px; --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+  .app { max-width: 430px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.25rem; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar-back { font-size: 13px; color: var(--text-2); background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 0; font-family: inherit; }
+  .sync-indicator { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 4px; }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); transition: background 0.3s; }
+  .sync-dot.synced { background: var(--green); }
+  .sync-dot.syncing { background: #f5a623; animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .asset-banner { background: var(--text); margin: 1rem 1rem 0; border-radius: var(--radius); padding: 1.15rem 1.25rem; }
+  .asset-label { font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.07em; margin-bottom: 6px; }
+  .asset-total { font-size: 27px; font-weight: 600; letter-spacing: -0.5px; color: #fff; margin-bottom: 10px; }
+  .asset-breakdown { display: flex; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
+  .asset-col { flex: 1; }
+  .asset-col + .asset-col { padding-left: 1rem; border-left: 1px solid rgba(255,255,255,0.1); margin-left: 1rem; }
+  .asset-col-label { font-size: 10.5px; color: rgba(255,255,255,0.45); margin-bottom: 3px; }
+  .asset-col-val { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); }
+  .asset-col-val.accent { color: #6ee7b7; }
+
+  .list-body { padding: 0.75rem 1rem 5rem; }
+  .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-3); text-transform: uppercase; padding: 0.75rem 0.25rem 0.4rem; }
+  .empty-hint { text-align: center; padding: 3rem 1rem; color: var(--text-3); font-size: 13px; line-height: 2.2; }
+  .empty-hint .big { font-size: 32px; margin-bottom: 0.5rem; }
+
+  .acct-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1rem 1.1rem; margin-bottom: 0.6rem; cursor: pointer; transition: box-shadow 0.15s, transform 0.12s; box-shadow: var(--shadow); }
+  .acct-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.09); transform: translateY(-1px); }
+  .acct-card:active { transform: scale(0.99); }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.65rem; }
+  .card-name { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .card-meta { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+  .badge { font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap; margin-left: 8px; flex-shrink: 0; }
+  .badge-blue { background: var(--blue-bg); color: var(--blue-text); }
+  .badge-green { background: var(--green-bg); color: var(--green-text); }
+  .badge-gray { background: #f0f0ee; color: #666; }
+  .card-amounts { display: flex; }
+  .amt-col { flex: 1; }
+  .amt-col + .amt-col { padding-left: 1rem; border-left: 1px solid var(--border); margin-left: 1rem; }
+  .amt-label { font-size: 10.5px; color: var(--text-3); margin-bottom: 2px; }
+  .amt-val { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .amt-val.blue { color: var(--blue); }
+  .amt-val.green { color: var(--green); }
+  .amt-diff { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+  .amt-diff.pos { color: var(--green); }
+  .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+  .card-dates { font-size: 11px; color: var(--text-2); }
+  .dday { font-size: 11.5px; font-weight: 600; }
+  .dday.blue { color: var(--blue); }
+  .dday.green { color: var(--green); }
+  .dday.gray { color: var(--text-3); }
+
+  .fab { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: var(--text); color: white; border: none; border-radius: 99px; padding: 0.75rem 1.4rem; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.22); transition: box-shadow 0.15s; z-index: 20; white-space: nowrap; }
+  .fab:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
+
+  .detail-body { padding: 1rem 1rem 5rem; }
+  .detail-header { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1.1rem; margin-bottom: 0.75rem; box-shadow: var(--shadow); }
+  .detail-name { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 4px; }
+  .detail-meta { font-size: 12px; color: var(--text-2); line-height: 1.8; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 1rem; }
+  .stat-box { background: var(--bg); border-radius: var(--radius-sm); padding: 0.75rem; }
+  .stat-lbl { font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
+  .stat-v { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .stat-v.blue { color: var(--blue); }
+  .stat-v.green { color: var(--green); }
+  .stat-v.red { color: var(--red); }
+  .result-block { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1.1rem; margin-bottom: 0.75rem; box-shadow: var(--shadow); }
+  .block-title { font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  .result-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 13px; }
+  .result-row .rl { color: var(--text-2); }
+  .result-row .rv { font-weight: 500; }
+  .result-row .rv.green { color: var(--green); }
+  .result-row .rv.red { color: var(--red); }
+  .result-total { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 0; margin-top: 6px; border-top: 1px solid var(--border); }
+  .result-total .rl { font-size: 14px; font-weight: 600; }
+  .result-total .rv { font-size: 17px; font-weight: 700; color: var(--blue); }
+  .deposit-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .deposit-item:last-child { border-bottom: none; }
+  .dep-left { display: flex; align-items: center; gap: 8px; }
+  .dep-type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-in { background: var(--blue); }
+  .dot-out { background: var(--red); }
+  .dot-int { background: var(--green); }
+  .dep-date { font-size: 12px; color: var(--text-2); }
+  .dep-label { font-size: 12px; color: var(--text-3); }
+  .dep-amount { font-size: 13px; font-weight: 600; }
+  .dep-amount.in { color: var(--text); }
+  .dep-amount.out { color: var(--red); }
+  .dep-amount.int { color: var(--green); }
+  .tier-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .tier-row:last-child { border-bottom: none; }
+  .tier-range { color: var(--text-2); }
+  .tier-rate { font-weight: 600; color: var(--blue); }
+  .action-row { display: flex; gap: 8px; margin-top: 0.25rem; }
+  .edit-btn { flex: 2; padding: 13px; border: 1px solid var(--border-md); border-radius: var(--radius-sm); background: transparent; color: var(--text); font-size: 13.5px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+  .edit-btn:hover { background: var(--bg); }
+  .delete-btn { flex: 1; padding: 13px; border: 1px solid #f5c0c0; border-radius: var(--radius-sm); background: transparent; color: var(--red); font-size: 13.5px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+  .delete-btn:hover { background: var(--red-bg); }
+
+  .form-body { padding: 1rem 1rem 5rem; }
+  .form-section { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1.1rem; margin-bottom: 0.75rem; box-shadow: var(--shadow); }
+  .form-section-title { font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  .field { margin-bottom: 0.85rem; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 5px; font-weight: 500; }
+  .field input, .field select { width: 100%; padding: 9px 11px; border: 1px solid var(--border-md); border-radius: var(--radius-sm); font-size: 14px; font-family: inherit; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.15s; }
+  .field input:focus, .field select:focus { border-color: var(--blue); background: white; }
+  .type-toggle { display: flex; gap: 8px; }
+  .type-btn { flex: 1; padding: 9px; border: 1.5px solid var(--border-md); border-radius: var(--radius-sm); background: var(--bg); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; text-align: center; transition: all 0.15s; color: var(--text-2); }
+  .type-btn.active-savings { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-text); }
+  .type-btn.active-parking { border-color: var(--green); background: var(--green-bg); color: var(--green-text); }
+  .type-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .deposit-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .deposit-row input, .deposit-row select { padding: 8px 10px; border: 1px solid var(--border-md); border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; color: var(--text); background: var(--bg); outline: none; }
+  .deposit-row input:focus, .deposit-row select:focus { border-color: var(--blue); background: white; }
+  .dep-date-input { flex: 2; min-width: 0; }
+  .dep-type-sel { flex: 1.2; min-width: 0; }
+  .dep-amt-input { flex: 2; min-width: 0; }
+  .dep-remove { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-md); background: var(--bg); color: var(--text-2); font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+  .dep-remove:hover { background: var(--red-bg); border-color: #f5c0c0; color: var(--red); }
+  .add-row-btn { width: 100%; padding: 8px; border: 1px dashed var(--border-md); border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font-size: 13px; font-family: inherit; cursor: pointer; margin-top: 4px; transition: all 0.15s; }
+  .add-row-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+  .tier-form-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .tier-form-row input { padding: 8px 10px; border: 1px solid var(--border-md); border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; color: var(--text); background: var(--bg); outline: none; flex: 1; min-width: 0; }
+  .tier-form-row input:focus { border-color: var(--green); background: white; }
+  .tier-sep { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+  .save-btn { width: 100%; padding: 14px; background: var(--text); color: white; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; margin-top: 0.25rem; transition: opacity 0.15s; }
+  .save-btn:hover { opacity: 0.85; }
+
+  .toast { position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: white; padding: 10px 18px; border-radius: 99px; font-size: 13px; font-weight: 500; opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; z-index: 100; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: none; align-items: flex-end; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet { background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; max-width: 430px; padding: 1.25rem; }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 0.5rem; }
+  .modal-desc { font-size: 13px; color: var(--text-2); margin-bottom: 1rem; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-cancel { flex: 1; padding: 12px; border: 1px solid var(--border-md); border-radius: var(--radius-sm); background: transparent; font-size: 14px; font-family: inherit; cursor: pointer; }
+  .modal-confirm { flex: 1; padding: 12px; border: none; border-radius: var(--radius-sm); background: var(--red); color: white; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
+
+  .loading-overlay { position: fixed; inset: 0; background: rgba(247,247,245,0.92); z-index: 200; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 13px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="screen active" id="screen-list">
+    <div class="topbar">
+      <span class="topbar-title">내 통장</span>
+      <div class="sync-indicator">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-text">연결 중...</span>
+      </div>
+    </div>
+    <div id="asset-banner-wrap"></div>
+    <div class="list-body" id="list-body"></div>
+    <button class="fab" onclick="goForm(null)">＋ 통장 추가</button>
+  </div>
+
+  <div class="screen" id="screen-detail">
+    <div class="topbar">
+      <button class="topbar-back" onclick="goList()">← 목록</button>
+      <span class="topbar-title" id="detail-topbar-title"></span>
+      <div style="width:60px"></div>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+
+  <div class="screen" id="screen-form">
+    <div class="topbar">
+      <button class="topbar-back" id="form-back-btn">← 취소</button>
+      <span class="topbar-title" id="form-title">새 통장 추가</span>
+      <div style="width:60px"></div>
+    </div>
+    <div class="form-body">
+      <div class="form-section">
+        <div class="form-section-title">통장 종류</div>
+        <div class="type-toggle">
+          <button class="type-btn active-savings" id="btn-savings" onclick="setType('savings')">적금</button>
+          <button class="type-btn" id="btn-parking" onclick="setType('parking')">파킹통장</button>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">기본 정보</div>
+        <div class="field"><label>통장 이름</label><input type="text" id="f-name" placeholder="예: 청년희망적금"></div>
+        <div class="field" id="f-months-wrap"><label>가입 개월수</label><input type="number" id="f-months" placeholder="12" min="1" oninput="autoCalcEndDate()"></div>
+        <div class="field" id="f-start-wrap"><label>가입일자</label><input type="date" id="f-start" oninput="autoCalcEndDate()"></div>
+        <div class="field" id="f-end-wrap"><label>만기일자 <span style="font-size:11px;color:var(--text-3)">(자동 계산)</span></label><input type="date" id="f-end"></div>
+        <div class="field" id="f-cycle-wrap" style="display:none"><label>이자 지급 주기</label><select id="f-cycle"><option value="daily">매일</option><option value="monthly" selected>매월</option></select></div>
+      </div>
+      <div class="form-section" id="savings-rate-section">
+        <div class="form-section-title">이자율</div>
+        <div class="field"><label>연 이자율 (%)</label><input type="number" id="f-rate" placeholder="5.0" step="0.01"></div>
+      </div>
+      <div class="form-section" id="parking-rate-section" style="display:none">
+        <div class="form-section-title">구간별 이자율</div>
+        <div id="tier-rows"></div>
+        <button class="add-row-btn" onclick="addTierRow()">＋ 구간 추가</button>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title" id="dep-section-title">입금 내역</div>
+        <div id="deposit-rows"></div>
+        <button class="add-row-btn" onclick="addDepositRow()">＋ 내역 추가</button>
+      </div>
+      <button class="save-btn" id="save-btn" onclick="saveAccount()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-sheet">
+    <div class="modal-title">통장을 삭제할까요?</div>
+    <div class="modal-desc">삭제하면 모든 내역이 사라지고 되돌릴 수 없어요.</div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">취소</button>
+      <button class="modal-confirm" id="modal-confirm-btn">삭제</button>
+    </div>
+  </div>
+</div>
+<div class="loading-overlay show" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">데이터 불러오는 중...</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════ JSONBIN 설정 ══════
+const MASTER_KEY = '$2a$10$6iDYgar8yYgaVrG.zlifU.fU0WH.oWAJ8H/z.Qc/CBJkL0yFbhv4S';
+const BIN_ID = '69cf2992856a682189f564aa';
+const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': MASTER_KEY };
+
+let accounts = [];
+let currentType = 'savings';
+let editingId = null;
+let deleteTargetId = null;
+let depositRowCount = 0;
+let tierRowCount = 0;
+let saveTimer = null;
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function fmt(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
+function fmtRate(r) { return parseFloat(r).toFixed(1) + '%'; }
+
+// ══════ SYNC ══════
+function setSyncStatus(s) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  dot.className = 'sync-dot ' + s;
+  txt.textContent = s==='synced'?'동기화됨' : s==='syncing'?'저장 중...' : s==='error'?'오프라인' : '연결 중...';
+}
+
+async function loadFromCloud() {
+  try {
+    setSyncStatus('syncing');
+    const res = await fetch(API_URL + '/latest', { headers: { 'X-Master-Key': MASTER_KEY } });
+    if (!res.ok) throw new Error('load fail');
+    const data = await res.json();
+    accounts = data.record?.accounts || [];
+    localStorage.setItem('myaccts_backup', JSON.stringify(accounts));
+    setSyncStatus('synced');
+    return true;
+  } catch(e) {
+    try { accounts = JSON.parse(localStorage.getItem('myaccts_backup') || '[]'); } catch(e2) { accounts = []; }
+    setSyncStatus('error');
+    return false;
+  }
+}
+
+async function saveToCloud() {
+  setSyncStatus('syncing');
+  try {
+    const res = await fetch(API_URL, {
+      method: 'PUT',
+      headers: HEADERS,
+      body: JSON.stringify({ accounts })
+    });
+    if (!res.ok) throw new Error('save fail');
+    localStorage.setItem('myaccts_backup', JSON.stringify(accounts));
+    setSyncStatus('synced');
+  } catch(e) {
+    localStorage.setItem('myaccts_backup', JSON.stringify(accounts));
+    setSyncStatus('error');
+    showToast('오프라인 상태 — 로컬에 저장됨');
+  }
+}
+
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  setSyncStatus('syncing');
+  saveTimer = setTimeout(saveToCloud, 800);
+}
+
+// ══════ NAV ══════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  window.scrollTo(0,0);
+}
+function hideLoading() { document.getElementById('loading-overlay').classList.remove('show'); }
+function goList() { renderList(); showScreen('list'); }
+function goDetail(id) { renderDetail(id); showScreen('detail'); }
+function goForm(id) {
+  editingId = id;
+  document.getElementById('btn-savings').disabled = !!id;
+  document.getElementById('btn-parking').disabled = !!id;
+  if (id) {
+    const acct = accounts.find(a => a.id === id);
+    if (acct) fillForm(acct);
+    document.getElementById('form-title').textContent = '통장 편집';
+    document.getElementById('save-btn').textContent = '수정 완료';
+    document.getElementById('form-back-btn').onclick = () => goDetail(id);
+  } else {
+    resetForm();
+    document.getElementById('form-title').textContent = '새 통장 추가';
+    document.getElementById('save-btn').textContent = '저장';
+    document.getElementById('form-back-btn').onclick = goList;
+  }
+  showScreen('form');
+}
+
+// ══════ CALC ══════
+function calcSavings(acct) {
+  const endDate = new Date(acct.endDate);
+  let totalPrincipal = 0, totalInterestBefore = 0;
+  (acct.deposits || []).forEach(dep => {
+    const amt = parseFloat(dep.amount) || 0;
+    totalPrincipal += amt;
+    const days = Math.max(0, Math.floor((endDate - new Date(dep.date)) / 86400000));
+    totalInterestBefore += amt * (parseFloat(acct.rate) / 100) * (days / 365);
+  });
+  const tax = totalInterestBefore * 0.154;
+  const interestAfter = totalInterestBefore - tax;
+  return { totalPrincipal, totalInterestBefore, tax, interestAfter, total: totalPrincipal + interestAfter };
+}
+
+function calcParking(acct) {
+  const txs = (acct.deposits || []).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+  const tiers = (acct.tiers || []).slice().sort((a,b) => parseFloat(a.from) - parseFloat(b.from));
+  const today = new Date(); today.setHours(0,0,0,0);
+  let balance = 0, totalInterestBefore = 0;
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
+    const nextDate = i + 1 < txs.length ? new Date(txs[i+1].date) : today;
+    const days = Math.max(0, Math.floor((nextDate - new Date(tx.date)) / 86400000));
+    const amt = parseFloat(tx.amount) || 0;
+    if (tx.type === 'out') balance -= amt;
+    else if (tx.type === 'interest') { totalInterestBefore += amt; balance += amt; continue; }
+    else balance += amt;
+    if (days > 0 && balance > 0) {
+      let rem = balance;
+      for (let t = 0; t < tiers.length; t++) {
+        if (rem <= 0) break;
+        const tierTo = t + 1 < tiers.length ? parseFloat(tiers[t+1].from) : Infinity;
+        const inTier = Math.min(rem, tierTo - (parseFloat(tiers[t].from) || 0));
+        if (inTier > 0) { totalInterestBefore += inTier * (parseFloat(tiers[t].rate) / 100) * (days / 365); rem -= inTier; }
+      }
+    }
+  }
+  const tax = totalInterestBefore * 0.154;
+  return { balance, totalInterestBefore, tax, interestAfter: totalInterestBefore - tax };
+}
+
+function getMaxRate(acct) {
+  if (acct.type === 'savings') return parseFloat(acct.rate) || 0;
+  return (acct.tiers || []).reduce((m,t) => Math.max(m, parseFloat(t.rate)||0), 0);
+}
+
+function calcTotalAssets() {
+  let totalPrincipal = 0, totalInterestAfter = 0;
+  accounts.forEach(a => {
+    if (a.type === 'savings') { const c = calcSavings(a); totalPrincipal += c.totalPrincipal; totalInterestAfter += c.interestAfter; }
+    else { const c = calcParking(a); totalPrincipal += c.balance; totalInterestAfter += c.interestAfter; }
+  });
+  return { totalPrincipal, totalInterestAfter, grandTotal: totalPrincipal + totalInterestAfter };
+}
+
+function getDday(endDate) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const end = new Date(endDate); end.setHours(0,0,0,0);
+  const diff = Math.floor((end - today) / 86400000);
+  if (diff > 0) return { label: 'D-' + diff, cls: 'blue' };
+  if (diff === 0) return { label: 'D-day', cls: 'blue' };
+  return { label: '만기 완료', cls: 'green' };
+}
+
+// ══════ LIST ══════
+function renderList() {
+  const bw = document.getElementById('asset-banner-wrap');
+  if (accounts.length) {
+    const { totalPrincipal, totalInterestAfter, grandTotal } = calcTotalAssets();
+    bw.innerHTML = `<div class="asset-banner">
+      <div class="asset-label">현재 총 자산</div>
+      <div class="asset-total">${fmt(grandTotal)}</div>
+      <div class="asset-breakdown">
+        <div class="asset-col"><div class="asset-col-label">납입 원금 합계</div><div class="asset-col-val">${fmt(totalPrincipal)}</div></div>
+        <div class="asset-col"><div class="asset-col-label">누적 세후 이자</div><div class="asset-col-val accent">+${fmt(totalInterestAfter)}</div></div>
+      </div>
+    </div>`;
+  } else bw.innerHTML = '';
+
+  const body = document.getElementById('list-body');
+  if (!accounts.length) { body.innerHTML = `<div class="empty-hint"><div class="big">🏦</div>아직 등록된 통장이 없어요<br>아래 버튼으로 첫 통장을 추가해보세요</div>`; return; }
+  const active = accounts.filter(a => a.type==='parking' || Math.floor((new Date(a.endDate)-new Date())/86400000)>=0);
+  const done = accounts.filter(a => a.type==='savings' && Math.floor((new Date(a.endDate)-new Date())/86400000)<0);
+  let html = '';
+  if (active.length) { html += '<div class="section-label">진행 중</div>'; active.forEach(a => { html += renderCard(a); }); }
+  if (done.length) { html += '<div class="section-label">만기 완료</div>'; done.forEach(a => { html += renderCard(a); }); }
+  body.innerHTML = html;
+}
+
+function renderCard(acct) {
+  const isSavings = acct.type === 'savings';
+  let pLabel, pVal, rLabel, rVal, rDiff, fLeft, fRight, badge;
+  if (isSavings) {
+    const c = calcSavings(acct); const d = getDday(acct.endDate);
+    badge = `<span class="badge ${d.cls==='green'?'badge-gray':'badge-blue'}">${d.cls==='green'?'만기완료':'적금'}</span>`;
+    pLabel='총 납입금액'; pVal=fmt(c.totalPrincipal); rLabel='세후 예상 수령액';
+    rVal=`<span class="amt-val blue">${fmt(c.total)}</span>`; rDiff=`+${fmt(c.interestAfter)}`;
+    fLeft=`${acct.startDate} ~ ${acct.endDate}`; fRight=`<span class="dday ${d.cls}">${d.label}</span>`;
+  } else {
+    const c = calcParking(acct);
+    badge = `<span class="badge badge-green">파킹</span>`;
+    pLabel='현재 잔액'; pVal=fmt(c.balance); rLabel='누적 세후 이자';
+    rVal=`<span class="amt-val green">${fmt(c.interestAfter)}</span>`; rDiff=`세전 ${fmt(c.totalInterestBefore)}`;
+    fLeft=`최고 ${fmtRate(getMaxRate(acct))}`; fRight=`<span class="dday gray">${acct.cycle==='daily'?'매일 이자':'매월 이자'}</span>`;
+  }
+  return `<div class="acct-card" onclick="goDetail('${acct.id}')">
+    <div class="card-top"><div><div class="card-name">${acct.name}</div>
+    <div class="card-meta">연 ${fmtRate(getMaxRate(acct))} · ${isSavings?acct.months+'개월':(acct.cycle==='daily'?'매일 지급':'매월 지급')}</div></div>${badge}</div>
+    <div class="card-amounts">
+      <div class="amt-col"><div class="amt-label">${pLabel}</div><div class="amt-val">${pVal}</div></div>
+      <div class="amt-col"><div class="amt-label">${rLabel}</div>${rVal}<div class="amt-diff pos">${rDiff}</div></div>
+    </div>
+    <div class="card-footer"><span class="card-dates">${fLeft}</span>${fRight}</div>
+  </div>`;
+}
+
+// ══════ DETAIL ══════
+function renderDetail(id) {
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  document.getElementById('detail-topbar-title').textContent = acct.name;
+  const isSavings = acct.type === 'savings';
+  let html = '';
+  if (isSavings) {
+    const c = calcSavings(acct); const d = getDday(acct.endDate);
+    html += `<div class="detail-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="detail-name">${acct.name}</div>
+        <div class="detail-meta">단리 · 연 ${fmtRate(acct.rate)} · ${acct.months}개월</div>
+        <div class="detail-meta">${acct.startDate} ~ ${acct.endDate}</div></div>
+        <span class="badge ${d.cls==='green'?'badge-gray':'badge-blue'}">${d.label}</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-lbl">총 납입금액</div><div class="stat-v">${fmt(c.totalPrincipal)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세전 이자</div><div class="stat-v">${fmt(c.totalInterestBefore)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세금 (15.4%)</div><div class="stat-v red">-${fmt(c.tax)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세후 이자</div><div class="stat-v green">${fmt(c.interestAfter)}</div></div>
+      </div>
+    </div>
+    <div class="result-block">
+      <div class="block-title">만기 수령 예정</div>
+      <div class="result-row"><span class="rl">납입 원금</span><span class="rv">${fmt(c.totalPrincipal)}</span></div>
+      <div class="result-row"><span class="rl">세전 이자</span><span class="rv green">+${fmt(c.totalInterestBefore)}</span></div>
+      <div class="result-row"><span class="rl">이자소득세 (15.4%)</span><span class="rv red">-${fmt(c.tax)}</span></div>
+      <div class="result-total"><span class="rl">세후 실 수령액</span><span class="rv">${fmt(c.total)}</span></div>
+    </div>`;
+  } else {
+    const c = calcParking(acct);
+    const tiers = (acct.tiers||[]).slice().sort((a,b)=>parseFloat(a.from)-parseFloat(b.from));
+    html += `<div class="detail-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="detail-name">${acct.name}</div>
+        <div class="detail-meta">파킹통장 · 최고 ${fmtRate(getMaxRate(acct))} · ${acct.cycle==='daily'?'매일 지급':'매월 지급'}</div></div>
+        <span class="badge badge-green">파킹</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-lbl">현재 잔액</div><div class="stat-v blue">${fmt(c.balance)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세전 이자 합계</div><div class="stat-v">${fmt(c.totalInterestBefore)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세금 (15.4%)</div><div class="stat-v red">-${fmt(c.tax)}</div></div>
+        <div class="stat-box"><div class="stat-lbl">세후 이자</div><div class="stat-v green">${fmt(c.interestAfter)}</div></div>
+      </div>
+    </div>
+    <div class="result-block">
+      <div class="block-title">누적 이자 현황 (오늘 기준)</div>
+      <div class="result-row"><span class="rl">누적 세전 이자</span><span class="rv green">+${fmt(c.totalInterestBefore)}</span></div>
+      <div class="result-row"><span class="rl">이자소득세 (15.4%)</span><span class="rv red">-${fmt(c.tax)}</span></div>
+      <div class="result-total"><span class="rl">누적 세후 이자</span><span class="rv">${fmt(c.interestAfter)}</span></div>
+    </div>
+    <div class="result-block">
+      <div class="block-title">구간별 이자율</div>
+      ${tiers.map((t,i)=>{
+        const next=tiers[i+1]?parseFloat(tiers[i+1].from):null;
+        const range=next?`${Number(t.from).toLocaleString()}원 ~ ${Number(next).toLocaleString()}원`:`${Number(t.from).toLocaleString()}원 초과`;
+        return `<div class="tier-row"><span class="tier-range">${range}</span><span class="tier-rate">${fmtRate(t.rate)}</span></div>`;
+      }).join('')}
+    </div>`;
+  }
+  const deps=(acct.deposits||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  html+=`<div class="result-block"><div class="block-title">${isSavings?'입금 내역':'거래 내역'}</div>`;
+  if(!deps.length){html+=`<div style="text-align:center;padding:1rem;color:var(--text-3);font-size:13px">내역이 없어요</div>`;}
+  else{deps.forEach(dep=>{
+    const amt=parseFloat(dep.amount)||0;
+    const ti=dep.type==='out'?{label:'출금',cls:'out',dot:'dot-out',sign:'-'}
+             :dep.type==='interest'?{label:'이자',cls:'int',dot:'dot-int',sign:'+'}
+             :{label:'입금',cls:'in',dot:'dot-in',sign:'+'};
+    html+=`<div class="deposit-item"><div class="dep-left"><div class="dep-type-dot ${ti.dot}"></div>
+    <div><div class="dep-date">${dep.date}</div><div class="dep-label">${ti.label}</div></div></div>
+    <span class="dep-amount ${ti.cls}">${ti.sign}${Math.round(amt).toLocaleString()}원</span></div>`;
+  });}
+  html+=`</div><div class="action-row">
+    <button class="edit-btn" onclick="goForm('${acct.id}')">✏️ 편집 / 내역 추가</button>
+    <button class="delete-btn" onclick="confirmDelete('${acct.id}')">삭제</button>
+  </div>`;
+  document.getElementById('detail-body').innerHTML=html;
+}
+
+// ══════ FORM ══════
+function setType(type) {
+  currentType=type;
+  document.getElementById('btn-savings').className='type-btn'+(type==='savings'?' active-savings':'');
+  document.getElementById('btn-parking').className='type-btn'+(type==='parking'?' active-parking':'');
+  ['f-months-wrap','f-start-wrap','f-end-wrap','savings-rate-section'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=type==='savings'?'':'none';});
+  ['f-cycle-wrap','parking-rate-section'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=type==='parking'?'':'none';});
+  document.getElementById('dep-section-title').textContent=type==='savings'?'입금 내역':'거래 내역';
+  document.querySelectorAll('#deposit-rows .deposit-row').forEach(row=>{
+    const sel=row.querySelector('select');if(!sel)return;
+    const cur=sel.value;
+    sel.innerHTML=type==='savings'?`<option value="in">입금</option>`:`<option value="in">입금</option><option value="out">출금</option><option value="interest">이자</option>`;
+    sel.value=cur;
+  });
+}
+
+function autoCalcEndDate(){
+  const months=parseInt(document.getElementById('f-months').value),start=document.getElementById('f-start').value;
+  if(!months||!start)return;
+  const d=new Date(start);d.setMonth(d.getMonth()+months);
+  document.getElementById('f-end').value=d.toISOString().slice(0,10);
+}
+
+function addDepositRow(date='',type='in',amount=''){
+  depositRowCount++;
+  const id='dep-'+depositRowCount;
+  const div=document.createElement('div');div.className='deposit-row';div.id=id;
+  const opts=currentType==='savings'
+    ?`<option value="in" ${type==='in'?'selected':''}>입금</option>`
+    :`<option value="in" ${type==='in'?'selected':''}>입금</option><option value="out" ${type==='out'?'selected':''}>출금</option><option value="interest" ${type==='interest'?'selected':''}>이자</option>`;
+  div.innerHTML=`<input type="date" class="dep-date-input" value="${date}"><select class="dep-type-sel">${opts}</select><input type="number" class="dep-amt-input" placeholder="금액" value="${amount}"><button class="dep-remove" onclick="document.getElementById('${id}').remove()">×</button>`;
+  document.getElementById('deposit-rows').appendChild(div);
+}
+
+function addTierRow(from='',rate=''){
+  tierRowCount++;
+  const id='tier-'+tierRowCount;
+  const div=document.createElement('div');div.className='tier-form-row';div.id=id;
+  div.innerHTML=`<input type="number" placeholder="시작 금액 (원)" value="${from}" style="flex:2"><span class="tier-sep">부터</span><input type="number" placeholder="금리 %" value="${rate}" style="flex:1.2" step="0.01"><button class="dep-remove" onclick="document.getElementById('${id}').remove()">×</button>`;
+  document.getElementById('tier-rows').appendChild(div);
+}
+
+function resetForm(){
+  ['f-name','f-months','f-start','f-end','f-rate'].forEach(id=>{document.getElementById(id).value='';});
+  document.getElementById('f-cycle').value='monthly';
+  document.getElementById('deposit-rows').innerHTML='';
+  document.getElementById('tier-rows').innerHTML='';
+  depositRowCount=0;tierRowCount=0;
+  document.getElementById('btn-savings').disabled=false;
+  document.getElementById('btn-parking').disabled=false;
+  setType('savings');addDepositRow();addTierRow(0,'');
+}
+
+function fillForm(acct){
+  document.getElementById('deposit-rows').innerHTML='';
+  document.getElementById('tier-rows').innerHTML='';
+  depositRowCount=0;tierRowCount=0;
+  setType(acct.type);
+  document.getElementById('f-name').value=acct.name||'';
+  if(acct.type==='savings'){
+    document.getElementById('f-months').value=acct.months||'';
+    document.getElementById('f-start').value=acct.startDate||'';
+    document.getElementById('f-end').value=acct.endDate||'';
+    document.getElementById('f-rate').value=acct.rate||'';
+  }else{
+    document.getElementById('f-cycle').value=acct.cycle||'monthly';
+    (acct.tiers||[]).sort((a,b)=>parseFloat(a.from)-parseFloat(b.from)).forEach(t=>addTierRow(t.from,t.rate));
+    if(!(acct.tiers||[]).length)addTierRow(0,'');
+  }
+  (acct.deposits||[]).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(d=>addDepositRow(d.date,d.type||'in',d.amount));
+  if(!(acct.deposits||[]).length)addDepositRow();
+}
+
+async function saveAccount(){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){showToast('통장 이름을 입력해주세요');return;}
+  const deposits=[];
+  document.querySelectorAll('#deposit-rows .deposit-row').forEach(row=>{
+    const inputs=row.querySelectorAll('input'),sel=row.querySelector('select');
+    if(inputs[0].value&&inputs[1].value)deposits.push({date:inputs[0].value,type:sel?sel.value:'in',amount:inputs[1].value});
+  });
+  let acct={name,type:currentType,deposits};
+  if(currentType==='savings'){
+    const months=document.getElementById('f-months').value,startDate=document.getElementById('f-start').value,
+          endDate=document.getElementById('f-end').value,rate=document.getElementById('f-rate').value;
+    if(!months||!startDate||!endDate||!rate){showToast('모든 항목을 입력해주세요');return;}
+    Object.assign(acct,{months,startDate,endDate,rate});
+  }else{
+    const cycle=document.getElementById('f-cycle').value,tiers=[];
+    document.querySelectorAll('#tier-rows .tier-form-row').forEach(row=>{
+      const inputs=row.querySelectorAll('input');
+      if(inputs[0].value!==''&&inputs[1].value)tiers.push({from:inputs[0].value,rate:inputs[1].value});
+    });
+    if(!tiers.length){showToast('이자율 구간을 하나 이상 입력해주세요');return;}
+    Object.assign(acct,{cycle,tiers});
+  }
+  if(editingId){const idx=accounts.findIndex(a=>a.id===editingId);if(idx!==-1){acct.id=editingId;accounts[idx]=acct;}}
+  else{acct.id=genId();accounts.push(acct);}
+  scheduleSave();
+  showToast(editingId?'수정되었어요 ✓':'저장되었어요 ✓');
+  const sid=acct.id;
+  setTimeout(()=>{editingId?goDetail(sid):goList();},500);
+}
+
+function confirmDelete(id){
+  deleteTargetId=id;
+  document.getElementById('delete-modal').classList.add('open');
+  document.getElementById('modal-confirm-btn').onclick=()=>{
+    accounts=accounts.filter(a=>a.id!==deleteTargetId);
+    scheduleSave();closeModal();showToast('삭제되었어요');setTimeout(goList,400);
+  };
+}
+function closeModal(){document.getElementById('delete-modal').classList.remove('open');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+// ══════ INIT ══════
+(async()=>{
+  await loadFromCloud();
+  hideLoading();
+  renderList();
+  showScreen('list');
+})();
+</script>
+</body>
+</html>
